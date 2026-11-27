@@ -1,0 +1,39 @@
+netbootxyz-standalone-ipxe
+==========================
+
+Unofficial derivative of netboot.xyz. Not affiliated with or endorsed by
+the netboot.xyz project. Please report problems with these builds here,
+not to netboot.xyz.
+
+netboot.xyz menus
+-----------------
+Copyright netboot.xyz contributors - https://github.com/netbootxyz/netboot.xyz
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+ipxe/        Rendered menus as served by https://boot.netboot.xyz/ on
+             2026-11-27, unmodified.
+standalone/  Modified versions of ipxe/*.ipxe. Changes (by GlitchLinux):
+             - added a standalone bootstrap header (arch detection, DHCP
+               retry loop, ntp, ${space}/${cls})
+             - inlined the boot.cfg variables each menu uses
+             - set ${menu} as the parent menu would
+             - redirected exit to a local exit menu
+             - added stub labels for goto targets missing upstream
+             - added the "Carbon" colour theme
+             Each modified file carries a header describing this.
+
+Bundled third-party binaries
+----------------------------
+iso/, efi/, krn/, refind/ contain compiled iPXE:
+  iPXE - https://ipxe.org - GPL-2.0-or-later / UBDL
+  Built from unmodified source https://github.com/ipxe/ipxe commit 21f9cda
+  (2026-11-25) with build config standalone/ipxe-config/general.h and the
+  embedded script standalone/<name>.ipxe (EMBED=). Build script:
+  standalone/build-iso.sh.
+
+iso/ contains SYSLINUX/ISOLINUX boot files (isolinux.bin, ldlinux.c32,
+isohdpfx.bin) - https://wiki.syslinux.org - GPL-2.0, from the Debian
+syslinux/isolinux packages.
+
+refind/ipxe-efi.img contains the rEFInd boot manager (EFI/BOOT/bootx64.efi) -
+https://www.rodsbooks.com/refind/ - GPL-3.0-or-later.

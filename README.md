@@ -4,7 +4,12 @@ Snapshot of the rendered netboot.xyz iPXE menus, scraped from
 https://boot.netboot.xyz/ on 2026-11-27 for study, plus standalone
 per-distro versions that can be embedded into their own iPXE ISO.
 
-All credit to the netboot.xyz project (Apache-2.0).
+> **Unofficial build** - not affiliated with or endorsed by netboot.xyz.
+> Report issues with these builds here, not upstream. The menus are a
+> snapshot from 2026-11-27 and do not auto-update like the real netboot.xyz.
+
+All credit to the netboot.xyz project (Apache-2.0, see `LICENSE` and `NOTICE`).
+Bundled iPXE, SYSLINUX and rEFInd binaries keep their own licenses (see `NOTICE`).
 
 ## Repository layout
 
