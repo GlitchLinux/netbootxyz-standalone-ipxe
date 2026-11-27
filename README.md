@@ -1,4 +1,4 @@
-# netbootxyz-menus
+# netbootxyz-standalone-ipxe
 
 Snapshot of the rendered netboot.xyz iPXE menus, scraped from
 https://boot.netboot.xyz/ on 2026-11-27 for study, plus standalone
