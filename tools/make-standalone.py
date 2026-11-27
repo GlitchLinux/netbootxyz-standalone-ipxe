@@ -81,6 +81,25 @@ set cls:hex 1b:5b:4a
 set cls ${{cls:string}}
 :nbx_cls_done
 
+:theme_carbon
+set theme_name Carbon
+colour --basic 0 0
+colour --basic 1 1
+colour --basic 2 2
+colour --basic 3 3
+colour --basic 0 4
+colour --basic 5 5
+colour --basic 6 6
+colour --basic 7 7
+cpair --foreground 7 --background 0 0
+cpair --foreground 7 --background 0 1
+cpair --foreground 1 --background 0 2
+cpair --foreground 6 --background 0 3
+cpair --foreground 1 --background 0 4
+cpair --foreground 7 --background 1 5
+cpair --foreground 6 --background 0 6
+cpair --foreground 0 --background 1 7
+
 :nbx_net
 isset ${{ip}} && goto nbx_net_done ||
 echo Configuring network (DHCP)...
