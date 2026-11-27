@@ -1,0 +1,41 @@
+#!ipxe
+
+goto ${menu} ||
+
+:live_menu
+set os 4MLinux
+menu ${os} - Current Arch [ ${arch} ]
+item --gap ${os} Versions
+item current-full ${space} ${os} current full
+item current-AntivirusLiveCD ${space} ${os} current AntivirusLiveCD
+item current-BakAndImg ${space} ${os} current BakAndImg
+item current-TheSSS ${space} ${os} current TheSSS
+choose version || goto exit
+goto ${version}
+
+:current-full
+set url ${live_endpoint}/asset-mirror/releases/download/52.0-858598a9/
+goto boot
+
+:current-AntivirusLiveCD
+set url ${live_endpoint}/asset-mirror/releases/download/53.0-1.5.4-4d985abe/
+goto boot
+
+:current-BakAndImg
+set url ${live_endpoint}/asset-mirror/releases/download/53.0-66a6c047/
+goto boot
+
+:current-TheSSS
+set url ${live_endpoint}/asset-mirror/releases/download/53.0-9155a5ca/
+goto boot
+
+
+:boot
+imgfree
+kernel ${url}vmlinuz root=/dev/ram0 vga=normal initrd=initrd.magic ${cmdline} 
+initrd ${url}initrd
+boot
+
+:live_exit
+clear menu
+exit 0

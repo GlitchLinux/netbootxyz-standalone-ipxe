@@ -1,0 +1,45 @@
+#!ipxe
+
+goto ${menu} ||
+
+:live_menu
+set os Q4OS Live
+menu ${os}
+item --gap ${os} Versions
+item 6.10 ${space} ${os} 6.10
+item 6.10 ${space} ${os} 6.10
+choose live_version || goto live_exit
+menu ${os} ${live_version}
+item --gap ${os} Flavors
+goto ${live_version}
+
+:6.10
+item q4os-default-squash ${space} Q4os 6.10 Trinity
+:6.10
+item q4os-plasma-squash ${space} Q4os 6.10 Plasma
+goto flavor_select
+
+:flavor_select
+choose flavor || goto live_menu
+echo ${cls}
+goto ${flavor} ||
+
+:q4os-default-squash
+set squash_url ${live_endpoint}/debian-squash/releases/download/6.10-20787c37/filesystem.squashfs
+set kernel_url ${live_endpoint}/debian-squash/releases/download/6.10-20787c37/
+goto q4os-boot
+:q4os-plasma-squash
+set squash_url ${live_endpoint}/debian-squash/releases/download/6.10-ef5260a0/filesystem.squashfs
+set kernel_url ${live_endpoint}/debian-squash/releases/download/6.10-20787c37/
+goto q4os-boot
+
+:q4os-boot
+imgfree
+kernel ${kernel_url}vmlinuz boot=live fetch=${squash_url} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:live_exit
+clear menu
+exit 0
+
