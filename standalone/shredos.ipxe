@@ -1,0 +1,110 @@
+#!ipxe
+# shredos.ipxe - standalone netboot.xyz "shredos" menu
+# Source : https://boot.netboot.xyz/shredos.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/shredos.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/shredos.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu shredos
+
+goto ${menu} ||
+
+:shredos
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} i386 && set os_arch i686 ||
+menu ShredOS
+item --gap THIS SOFTWARE DESTROYS DATA
+item --gap EVERY BOOT OPTION IS DESTRUCTIVE
+item --gap DO NOT PROCEED IF YOU DO NOT KNOW WHAT THIS IS
+item shredos_exit ${space} Go Back
+item shredos_options ${space} Proceed I know what I am doing
+choose menu || goto shredos_exit
+goto ${menu}
+
+:shredos_options
+clear menu
+clear shredos_version
+iseq ${os_arch} i686 && set kernel_url ${live_endpoint}/asset-mirror/releases/download/2025.11_32_i686_0.43.1-fae15aed/shredos ||
+set shredos_version 2025.11_32_i686_0.43.1
+iseq ${os_arch} x86_64 && set kernel_url ${live_endpoint}/asset-mirror/releases/download/2025.11_32_x86-64_0.43.1-5918787c/shredos ||
+set shredos_version 2025.11_32_x86-64_0.43.1
+menu ShredOS ${shredos_version}
+item --gap Choose a wipe method:
+item dodshort ${space} Wipe all disks with the short DoD 5220.22-M method
+item dod522022m ${space} Wipe all disks with the DoD 5220.22-M method
+item dod3pass ${space} Wipe all disks with the DoD 5220.22-M method (3 pass)
+item ops2 ${space} Wipe all disks with the RCMP TSSIT OPS-II method
+item gutmann ${space} Wipe all disks with the Gutmann method
+item prng ${space} Wipe all disks with the PRNG Stream method
+choose nuke_method || goto shredos_exit
+goto shredos_boot
+
+:shredos_boot
+imgfree
+kernel ${kernel_url} console=tty3 loglevel=3 nwipe_options="--method=${nuke_method}" ${cmdline}
+boot
+
+:shredos_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu shredos - netboot.xyz standalone
+item nbx_restart ${space} Back to shredos menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the shredos menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

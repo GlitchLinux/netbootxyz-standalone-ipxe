@@ -1,0 +1,128 @@
+#!ipxe
+# scos.ipxe - standalone netboot.xyz "scos" menu
+# Source : https://boot.netboot.xyz/scos.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/scos.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/scos.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${scos_mirror} || set scos_mirror https://cloud.centos.org
+isset ${scos_base_dir} || set scos_base_dir centos/scos
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu scos
+
+# CentOS Stream CoreOS (SCOS)
+# https://www.centos.org/cloud/
+# https://github.com/coreos/coreos-installer/blob/master/README.md#installing-from-pxe
+
+goto ${menu}
+
+:scos
+set os CentOS Stream CoreOS
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} arm64 && set os_arch aarch64 ||
+isset ${install_device} || set install_device unset
+isset ${ignition_url} || set ignition_url skip
+menu ${os} - ${os_arch}
+item --gap ${os}:
+item 9.0.20250222-0 ${space} ${os} 9.0.20250222-0
+item 9.0.20250411-0 ${space} ${os} 9.0.20250411-0
+item 9.0.20250510-0 ${space} ${os} 9.0.20250510-0
+item 10.0.20250628-0 ${space} ${os} 10.0.20250628-0
+item 10.0.20251103-0 ${space} ${os} 10.0.20251103-0
+item install_dev ${space} Set install device (e.g. /dev/sda): ${install_device}
+item ignition_config ${space} Set ignition config url: ${ignition_url}
+choose --default ${scos_version} scos_version || goto scos_exit
+echo ${cls}
+iseq ${scos_version} ignition_config && goto ignition_config ||
+iseq ${scos_version} install_dev && goto install_dev ||
+goto scos_boot ||
+goto scos_exit
+
+:scos_boot
+iseq ${scos_version} 9.0.20250222-0 && set scos_major_version 9 ||
+iseq ${scos_version} 9.0.20250411-0 && set scos_major_version 9 ||
+iseq ${scos_version} 9.0.20250510-0 && set scos_major_version 9 ||
+iseq ${scos_version} 10.0.20250628-0 && set scos_major_version 10 ||
+iseq ${scos_version} 10.0.20251103-0 && set scos_major_version 10 ||
+set base_url ${scos_mirror}/${scos_base_dir}/${scos_major_version}/prod/streams
+set build_version ${scos_version}
+imgfree
+kernel ${base_url}/${build_version}/${os_arch}/scos-${build_version}-live-kernel.${os_arch} ip=dhcp rd.neednet=1 coreos.inst.install_dev=${install_device} coreos.inst.ignition_url=${ignition_url} coreos.live.rootfs_url=${base_url}/${build_version}/${os_arch}/scos-${build_version}-live-rootfs.${os_arch}.img initrd=initrd.magic initrd=initrd.magic ${cmdline}
+initrd ${base_url}/${build_version}/${os_arch}/scos-${build_version}-live-initramfs.${os_arch}.img
+boot
+goto scos_exit
+
+:install_dev
+echo -n Selected install device will be overwritten,
+echo -n please ensure you know what you are doing...
+echo -n Please set desired install device:  && read install_device
+clear menu
+goto scos
+
+:ignition_config
+echo -n Please set Ignition Configuration URL:  && read ignition_url
+clear menu
+goto scos
+
+:scos_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu scos - netboot.xyz standalone
+item nbx_restart ${space} Back to scos menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the scos menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

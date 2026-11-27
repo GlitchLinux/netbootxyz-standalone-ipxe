@@ -1,0 +1,123 @@
+#!ipxe
+# rhel.ipxe - standalone netboot.xyz "rhel" menu
+# Source : https://boot.netboot.xyz/rhel.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/rhel.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/rhel.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+# (none)
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu rhel
+
+# Redhat Enterprise Linux (RHEL)
+# https://www.redhat.com
+
+isset ${dhcp-server} && set ipparam ip=dhcp || set ipparam ip=${ip}::${gateway}:${netmask}:::none nameserver=${dns}
+set ipparam BOOTIF=${netX/mac} ${ipparam}
+
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} arm64 && set os_arch aarch64 ||
+goto ${menu} ||
+
+:rhel
+set os Red Hat Enterprise Linux - ${os_arch}
+clear rhel_version
+menu ${os}
+item --gap Installers
+item rhel_install ${space} ${os} Graphical Install
+item rhel_install_text ${space} ${os} Text Install
+item --gap Options:
+item url_set ${space} Base URL [ ${rhel_base_url} ]
+choose rhel_version || goto rhel_exit
+goto ${rhel_version}
+
+:url_set
+echo Set the HTTP URL of an extracted RHEL ISO without the trailing slash:
+echo e.g. http://www.mydomain.com/rhel/7
+echo
+echo -n URL: ${} && read rhel_base_url
+echo
+echo netboot.xyz will attempt to load the following files:
+echo ${rhel_base_url}/os/${os_arch}/images/pxeboot/vmlinuz
+echo ${rhel_base_url}/os/${os_arch}/images/pxeboot/initrd.img
+echo
+prompt Press any key to return to RHEL Menu...
+goto rhel
+
+:rhel_install_text
+set params inst.text
+goto rhel_install
+
+:rhel_install
+isset ${rhel_base_url} && goto boot || echo URL not set... && goto url_set
+goto boot
+
+:boot
+imgfree
+kernel ${rhel_base_url}/os/${os_arch}/images/pxeboot/vmlinuz inst.repo=${rhel_base_url}/os/${os_arch} ${ipparam} ${params} initrd=initrd.magic ${cmdline}
+initrd ${rhel_base_url}/os/${os_arch}/images/pxeboot/initrd.img
+md5sum vmlinuz initrd.img
+boot
+goto rhel
+
+:rhel_exit
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu rhel - netboot.xyz standalone
+item nbx_restart ${space} Back to rhel menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the rhel menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

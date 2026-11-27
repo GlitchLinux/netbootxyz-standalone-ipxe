@@ -1,0 +1,112 @@
+#!ipxe
+# harvester.ipxe - standalone netboot.xyz "harvester" menu
+# Source : https://boot.netboot.xyz/harvester.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/harvester.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/harvester.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu harvester
+
+# Harvester
+# https://harvesterhci.io/
+# https://docs.harvesterhci.io/v1.0/install/pxe-boot-install/
+
+goto ${menu} ||
+
+:harvester
+set os Harvester
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+menu ${os} - ${os_arch}
+item --gap Harvester:
+item harvester_url ${space} Begin install of Harvester ${os} v1.9.1
+item --gap Parameters:
+item harvester_config_url ${space} Set config-create or config-join.yaml URL: ${harvester_config_url}
+choose --default ${menu} menu || goto harvester_exit
+echo ${cls}
+goto ${menu} ||
+goto harvester_exit
+
+:harvester_config_url
+echo -n Set config.yaml URL:  && read harvester_config_url
+clear menu
+goto harvester
+
+:harvester_url
+set harvester_url ${live_endpoint}/asset-mirror/releases/download/v1.9.1-9348084a/
+goto harvester_boot
+
+:harvester_boot
+set install_params harvester.install.automatic=true harvester.install.config_url=${harvester_config_url}
+set boot_params ip=dhcp net.ifnames=1 console=ttyS0 console=tty1 rd.cos.disable root=live:${harvester_url}/harvester-rootfs-${os_arch}.squashfs rd.noverifyssl
+imgfree
+kernel ${harvester_url}/harvester-vmlinuz-${os_arch} ${install_params} ${boot_params} initrd=initrd.magic ${cmdline}
+initrd ${harvester_url}/harvester-initrd-${os_arch}
+echo
+echo MD5sums:
+md5sum harvester-vmlinuz-${os_arch} harvester-initrd-${os_arch}
+boot
+
+:harvester_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu harvester - netboot.xyz standalone
+item nbx_restart ${space} Back to harvester menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the harvester menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

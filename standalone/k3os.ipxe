@@ -1,0 +1,148 @@
+#!ipxe
+# k3os.ipxe - standalone netboot.xyz "k3os" menu
+# Source : https://boot.netboot.xyz/k3os.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/k3os.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/k3os.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+# (none)
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu k3os
+
+# k3OS by Rancher
+# https://k3os.io/
+# https://github.com/rancher/k3os#configuration-reference
+
+goto ${menu} ||
+
+:k3os
+set os k3OS
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+set k3os_mirror https://github.com/rancher/k3os/releases
+isset ${k3os_version} || set k3os_version latest
+isset ${k3os_install_device} || set k3os_install_device /dev/sda
+menu ${os} by Rancher
+menu ${os} install
+item --gap k3OS:
+item k3os_boot ${space} Begin install ${os} ${k3os_version}
+item --gap Parameters:
+item k3os_version ${space} ${os} version: ${k3os_version}
+item k3os_install_device ${space} Set install device: ${k3os_install_device}
+item k3os_config_url ${space} Set config.yaml URL: ${k3os_config_url}
+item k3os_mirror ${space} Set mirror URL: ${k3os_mirror}
+choose --default ${menu} menu || goto k3os_exit
+echo ${cls}
+goto ${menu} ||
+goto k3os_exit
+
+:k3os_version 
+menu ${os} version
+item latest ${space} latest 
+item custom ${space} Set custom version
+choose --default ${version} version || goto k3os_exit
+echo ${cls}
+goto k3os_version_${version} ||
+goto k3os_exit
+
+:k3os_version_latest
+set k3os_version latest
+set k3os_base_url ${k3os_mirror}/latest/download
+goto k3os
+
+:k3os_version_custom
+clear k3os_version
+echo -n Please set k3OS version manually (in format vX.Y.Z):  && read k3os_version
+set k3os_base_url ${k3os_mirror}/download/${k3os_version}
+clear menu
+goto k3os
+
+:k3os_install_device
+echo -n Please set desired install device:  && read k3os_install_device
+clear menu
+goto k3os
+
+:k3os_mirror
+echo -n Set mirror URL:  && read k3os_mirror
+clear menu
+goto k3os_version || 
+goto k3os_exit
+
+:k3os_config_url
+echo -n Set config.yaml URL:  && read k3os_config_url
+clear menu
+goto k3os
+
+:k3os_boot
+isset ${k3os_base_url} || set k3os_base_url ${k3os_mirror}/latest/download
+set install_params k3os.install.silent=true k3os.mode=install k3os.install.config_url=${k3os_config_url} k3os.install.device=${k3os_install_device}
+set boot_params printk.devkmsg=on k3os.install.iso_url=${k3os_base_url}/k3os-${os_arch}.iso console=ttyS0 console=tty1
+imgfree
+kernel ${k3os_base_url}/k3os-vmlinuz-${os_arch} ${install_params} ${boot_params} initrd=initrd.magic ${cmdline}
+initrd ${k3os_base_url}/k3os-initrd-${os_arch}
+echo
+echo MD5sums:
+md5sum k3os-vmlinuz-${os_arch} k3os-initrd-${os_arch}
+boot
+
+:k3os_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu k3os - netboot.xyz standalone
+item nbx_restart ${space} Back to k3os menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the k3os menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

@@ -1,0 +1,136 @@
+#!ipxe
+# smartos.ipxe - standalone netboot.xyz "smartos" menu
+# Source : https://boot.netboot.xyz/smartos.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/smartos.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/smartos.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${smartos_mirror} || set smartos_mirror https://netboot.smartos.org/os/
+isset ${smartos_base_dir} || set smartos_base_dir /platform/i86pc/
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu smartos
+######################################
+# SmartOS                            #
+# https://www.smartos.org/           #
+# Credit: https://github.com/bahamat #
+######################################
+
+
+:custom
+clear smartos_build
+clear kflags
+set noimport false
+set kmdb_e false
+set kmdb_b false
+goto smartos_menu
+
+:smartos_menu
+set os SmartOS
+menu ${os}
+item --gap Platform Images:
+item 20261121T172607Z ${space} ${os} 20261121T172607Z
+item 20261023T001807Z ${space} ${os} 20261023T001807Z
+item 20261009T131447Z ${space} ${os} 20261009T131447Z
+item 20260903T001557Z ${space} ${os} 20260903T001557Z
+item --gap Options:
+item toggle_pool ${space} Rescue mode: ${noimport}
+item toggle_kmdb_e ${space} Load Kernel Debugger: ${kmdb_e}
+item toggle_kmdb_b ${space} Boot Kernel Debugger First: ${kmdb_b}
+
+iseq ${noimport} true && item --gap ${space} ||
+iseq ${noimport} true && item --gap ${space} Zpool will not be imported. Rescue mode root password can be found at ||
+iseq ${noimport} true && item --gap ${space} https://us-central.manta.mnx.io/Joyent_Dev/public/SmartOS/smartos.html ||
+
+choose smartos_build || goto smartos_exit
+iseq ${smartos_build} toggle_pool && goto toggle_pool ||
+iseq ${smartos_build} toggle_kmdb_e && goto toggle_kmdb_e ||
+iseq ${smartos_build} toggle_kmdb_b && goto toggle_kmdb_b ||
+goto smartos_boot
+
+:smartos_boot
+iseq ${kmdb_e} true && set kflags:hex 2d:6b ||
+iseq ${kmdb_b} true && set kflags:hex 2d:6b:64 ||
+kernel ${smartos_mirror}${smartos_build}${smartos_base_dir}kernel/amd64/unix ${kflags:string} -B console=text,text-mode="115200,8,n,1,-",smartos=true,noimport=${noimport}${root_shadow:string} ${cmdline}
+module ${smartos_mirror}${smartos_build}${smartos_base_dir}amd64/boot_archive type=rootfs name=ramdisk || goto fail
+module ${smartos_mirror}${smartos_build}${smartos_base_dir}amd64/boot_archive.hash type=hash name=ramdisk || goto fail
+boot
+
+:toggle_pool
+iseq ${noimport} true && set noimport false || set noimport true
+iseq ${noimport} false && clear root_shadow || set root_shadow:hex 2c:72:6f:6f:74:5f:73:68:61:64:6f:77:3d:27:24:35:24:32:48:4f:48:52:6e:4b:33:24:4e:76:4c:6c:6d:2e:31:4b:51:42:62:42:30:57:6a:6f:50:37:78:63:49:77:47:6e:6c:6c:68:7a:70:32:48:6e:54:2e:6d:44:4f:37:44:70:78:59:41:27:0a
+goto smartos_menu
+
+:toggle_kmdb_e
+iseq ${kmdb_e} true && set kmdb_e false || set kmdb_e true
+iseq ${kmdb_e} false && set kmdb_b false ||
+goto smartos_menu
+
+:toggle_kmdb_b
+iseq ${kmdb_b} true && set kmdb_b false || set kmdb_b true
+iseq ${kmdb_b} true && set kmdb_e true ||
+goto smartos_menu
+
+:smartos_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+:fail
+echo smartos: menu target 'fail' does not exist upstream.
+prompt Press any key...
+goto nbx_exit
+
+########## standalone exit menu ##########
+:nbx_exit
+menu smartos - netboot.xyz standalone
+item nbx_restart ${space} Back to smartos menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the smartos menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

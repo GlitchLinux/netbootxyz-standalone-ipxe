@@ -1,0 +1,100 @@
+#!ipxe
+# ipfire.ipxe - standalone netboot.xyz "ipfire" menu
+# Source : https://boot.netboot.xyz/ipfire.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/ipfire.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/ipfire.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${ipfire_mirror} || set ipfire_mirror https://downloads.ipfire.org
+isset ${ipfire_base_dir} || set ipfire_base_dir releases/ipfire-2.x
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu ipfire
+
+# IPFire
+# https://www.ipfire.org/
+
+goto ${menu} ||
+
+:ipfire
+clear osversion
+set os IPFire
+menu ${os}
+item 2.29-core206 ${space} ${os} 2.29 Core206
+isset ${osversion} || choose osversion || goto linux_menu
+echo ${cls}
+set dir ${ipfire_base_dir}/${osversion}/images/x86_64
+goto ipfire_images
+
+:ipfire_images
+imgfree
+kernel ${ipfire_mirror}/${dir}/vmlinuz vga=791 initrd=initrd.magic ${cmdline}
+initrd ${ipfire_mirror}/${dir}/instroot
+echo
+echo MD5sums:
+md5sum vmlinuz instroot
+boot
+
+:ipfire_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+:linux_menu
+echo ipfire: menu target 'linux_menu' does not exist upstream.
+prompt Press any key...
+goto nbx_exit
+
+########## standalone exit menu ##########
+:nbx_exit
+menu ipfire - netboot.xyz standalone
+item nbx_restart ${space} Back to ipfire menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the ipfire menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

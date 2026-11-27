@@ -1,0 +1,120 @@
+#!ipxe
+# oracle.ipxe - standalone netboot.xyz "oracle" menu
+# Source : https://boot.netboot.xyz/oracle.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/oracle.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/oracle.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu oracle
+
+isset ${dhcp-server} && set ipparam ip=dhcp || set ipparam ip=${ip}::${gateway}:${netmask}:::none nameserver=${dns}
+set ipparam BOOTIF=${netX/mac} ${ipparam}
+
+goto ${menu} ||
+
+:oracle_menu
+set os Oracle Linux
+menu ${os}
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} arm64 && set os_arch aarch64 ||
+item --gap ${os} Versions
+iseq ${os_arch} x86_64 && item 8 ${space} ${os} 8 ||
+item 9 ${space} ${os} 9
+choose version || goto oracle_exit
+goto ${version}
+
+:8
+iseq ${os_arch} x86_64 && goto 8_x86_64 ||
+goto oracle_exit
+
+:9
+iseq ${os_arch} aarch64 && goto 9_aarch64 ||
+iseq ${os_arch} x86_64 && goto 9_x86_64 ||
+goto oracle_exit
+
+:8_x86_64
+set url ${live_endpoint}/asset-mirror/releases/download/6-ddbb57bc/
+set repo https://yum.oracle.com/repo/OracleLinux/OL8/baseos/latest/${os_arch}
+goto boot
+
+:9_aarch64
+set url ${live_endpoint}/asset-mirror/releases/download/U3-e36ba13e/
+set repo https://yum.oracle.com/repo/OracleLinux/OL9/baseos/latest/${os_arch}
+goto boot
+
+:9_x86_64
+set url ${live_endpoint}/asset-mirror/releases/download/U3-cf364f3e/
+set repo https://yum.oracle.com/repo/OracleLinux/OL9/baseos/latest/${os_arch}
+goto boot
+
+
+:boot
+imgfree
+kernel ${url}vmlinuz ${ipparam} inst.repo=${repo} root=live:${url}squashfs.img ro rd.live.image rd.lvm=0 rd.luks=0 rd.md=0 rd.dm=0 initrd=initrd.magic ${cmdline}
+initrd ${url}initrd
+boot
+
+:oracle_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu oracle - netboot.xyz standalone
+item nbx_restart ${space} Back to oracle menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the oracle menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

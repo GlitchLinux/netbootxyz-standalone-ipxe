@@ -1,0 +1,107 @@
+#!ipxe
+# photon.ipxe - standalone netboot.xyz "photon" menu
+# Source : https://boot.netboot.xyz/photon.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/photon.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/photon.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu photon
+
+# VMware Photon
+# https://vmware.github.io/photon/
+
+goto ${menu} ||
+
+:photon
+set os VMware Photon
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} arm64 && set os_arch aarch64 ||
+clear photon_choice
+menu ${os}
+item --gap ${os} Installers
+item photon_install ${space} ${os} 4.0 Installer
+choose photon_choice || goto photon_exit
+goto ${photon_choice}
+
+:photon_install
+iseq ${os_arch} x86_64 && goto x86_64 ||
+iseq ${os_arch} aarch64 && goto aarch64 ||
+:x86_64
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/4.0-7d7ef0f1/
+set photon_version 4.0
+goto photon_boot
+:aarch64
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/4.0-a41853eb/
+set photon_version 4.0
+goto photon_boot
+
+:photon_boot
+imgfree
+kernel ${kernel_url}vmlinuz root=/dev/ram0 loglevel=3 repo=https://packages.vmware.com/photon/${photon_version}/photon_release_${photon_version}_${os_arch} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd.img
+boot
+goto photon
+
+:photon_exit
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu photon - netboot.xyz standalone
+item nbx_restart ${space} Back to photon menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the photon menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

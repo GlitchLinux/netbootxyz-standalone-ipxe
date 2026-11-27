@@ -1,0 +1,180 @@
+#!ipxe
+# live-mint.ipxe - standalone netboot.xyz "live-mint" menu
+# Source : https://boot.netboot.xyz/live-mint.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/live-mint.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/live-mint.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu live-mint
+
+goto ${menu} ||
+
+:live_menu
+set os Mint Live
+menu ${os}
+item --gap ${os} Versions
+item 21 ${space} ${os} 21
+item 20 ${space} ${os} 20
+item lmde ${space} ${os} LMDE
+choose live_version || goto live_exit
+menu ${os} ${live_version}
+item --gap ${os} Flavors
+goto ${live_version}
+
+:22
+item mint-22-cinnamon-squash ${space} Mint 22 Cinnamon
+item mint-22-mate-squash ${space} Mint 22 Mate
+item mint-22-xfce-squash ${space} Mint 22 Xfce
+goto flavor_select
+
+:21
+item mint-21-cinnamon-squash ${space} Mint 21 Cinnamon
+item mint-21-mate-squash ${space} Mint 21 Mate
+item mint-21-xfce-squash ${space} Mint 21 Xfce
+goto flavor_select
+
+:20
+item mint-20-cinnamon-squash ${space} Mint 20.3 Cinnamon
+item mint-20-mate-squash ${space} Mint 20.3 Mate
+item mint-20-xfce-squash ${space} Mint 20.3 Xfce
+goto flavor_select
+
+:lmde
+goto flavor_select
+
+:flavor_select
+choose flavor || goto live_menu
+echo ${cls}
+goto ${flavor} ||
+
+:mint-20-cinnamon-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-8b9bc9d4/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-8b9bc9d4/
+goto 20-boot
+:mint-20-mate-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-1308999e/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-1308999e/
+goto 20-boot
+:mint-20-xfce-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-68ef39b2/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/20.3-68ef39b2/
+goto 20-boot
+:mint-21-cinnamon-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/21-eec307d9/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/21-eec307d9/
+goto 21-boot
+:mint-21-mate-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/21-cab2fe58/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/21-cab2fe58/
+goto 21-boot
+:mint-21-xfce-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/21-661c5b6f/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/21-661c5b6f/
+goto 21-boot
+:mint-22-cinnamon-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/22-2b593d38/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/22-2b593d38/
+goto 22-boot
+:mint-22-mate-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/22-487af4d4/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/22-487af4d4/
+goto 22-boot
+:mint-22-xfce-squash
+set squash_url ${live_endpoint}/ubuntu-squash/releases/download/22-8770cb66/filesystem.squashfs
+set kernel_url ${live_endpoint}/ubuntu-squash/releases/download/22-8770cb66/
+goto 22-boot
+:mint-lmde-cinnamon-squash
+set squash_url ${live_endpoint}/debian-squash/releases/download/6-1834227b/filesystem.squashfs
+set kernel_url ${live_endpoint}/debian-squash/releases/download/6-1834227b/
+goto 6-boot
+
+:22-boot
+imgfree
+kernel ${kernel_url}vmlinuz ip=dhcp boot=casper netboot=url url=${squash_url} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:21-boot
+imgfree
+kernel ${kernel_url}vmlinuz ip=dhcp boot=casper netboot=url url=${squash_url} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:20-boot
+imgfree
+kernel ${kernel_url}vmlinuz ip=dhcp boot=casper netboot=url url=${squash_url} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:lmde-boot
+imgfree
+kernel ${kernel_url}vmlinuz boot=live fetch=${squash_url} initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:live_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+:6-boot
+echo live-mint: menu target '6-boot' does not exist upstream.
+prompt Press any key...
+goto nbx_exit
+
+########## standalone exit menu ##########
+:nbx_exit
+menu live-mint - netboot.xyz standalone
+item nbx_restart ${space} Back to live-mint menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the live-mint menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

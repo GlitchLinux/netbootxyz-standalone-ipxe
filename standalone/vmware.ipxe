@@ -1,0 +1,134 @@
+#!ipxe
+# vmware.ipxe - standalone netboot.xyz "vmware" menu
+# Source : https://boot.netboot.xyz/vmware.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/vmware.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/vmware.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+# (none)
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu vmware
+
+# VMware ESXi
+# https://www.vmware.com
+
+goto ${menu} ||
+
+:vmware
+set os VMware ESXi
+clear vmware_choice
+menu ${os}
+item --gap Installers
+item vmware_install ${space} ${os} Install
+item --gap Options:
+item url_set ${space} Base URL [ ${vmware_base_url} ]
+choose vmware_choice || goto vmware_exit
+goto ${vmware_choice}
+
+:url_set
+echo Set the HTTP URL of an extracted VMware ISO without the trailing slash:
+echo e.g. http://www.mydomain.com/vmware/esxi7
+echo
+echo -n URL: ${} && read vmware_base_url
+echo
+echo The following files will be loaded the following files:
+echo
+echo For Legacy: ${vmware_base_url}/mboot.c32 
+echo For EFI: ${vmware_base_url}/efi/boot/bootx64.efi
+echo 
+echo The ESXi modules will be loaded from the following file:
+echo ${vmware_base_url}/boot.cfg
+echo
+echo Ensure you have edited boot.cfg to reflect the prefix of:
+echo
+echo prefix=${vmware_base_url}
+echo kernelopt=runweasel ks=${vmware_base_url}/ks.cfg
+echo 
+echo If you aren't doing kickstart automation, you can leave off the ks option.
+echo
+echo If the filenames in the kernel= and modules= lines begin with a forward
+echo slash (/) character, delete those characters.
+echo
+prompt Press any key to return to VMware Menu...
+goto vmware
+
+:vmware_install
+isset ${vmware_base_url} && goto boot_check || echo URL not set... && goto url_set
+:boot_check
+iseq ${platform} efi && goto efi_boot || goto legacy_boot
+
+:efi_boot
+imgfree
+kernel ${vmware_base_url}/efi/boot/bootx64.efi -c ${vmware_base_url}/boot.cfg
+goto boot
+
+:legacy_boot
+imgfree
+kernel ${vmware_base_url}/mboot.c32 -c ${vmware_base_url}/boot.cfg
+goto boot
+
+:boot
+md5sum bootx64.efi
+boot
+goto vmware
+
+:vmware_exit
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu vmware - netboot.xyz standalone
+item nbx_restart ${space} Back to vmware menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the vmware menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

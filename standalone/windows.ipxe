@@ -1,0 +1,124 @@
+#!ipxe
+# windows.ipxe - standalone netboot.xyz "windows" menu
+# Source : https://boot.netboot.xyz/windows.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/windows.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/windows.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${boot_domain} || set boot_domain boot.netboot.xyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu windows
+
+# Microsoft Windows
+# https://www.microsoft.com
+
+set win_arch x64
+goto ${menu} ||
+
+:windows
+set os Microsoft Windows
+clear win_version
+menu ${os} 
+item --gap Installers
+item win_install ${space} Load ${os} Installer...
+item --gap Options:
+item arch_set ${space} Architecture [ ${win_arch} ]
+item url_set ${space} Base URL [ ${win_base_url} ]
+choose win_version || goto windows_exit
+goto ${win_version}
+
+:arch_set
+iseq ${win_arch} x64 && set win_arch x86 || set win_arch x64
+goto windows
+
+:url_set
+echo Set the HTTP URL of an extracted Windows ISO without the trailing slash:
+echo e.g. http://www.mydomain.com/windows
+echo
+echo -n URL: ${} && read win_base_url
+echo
+echo netboot.xyz will attempt to load the following files:
+echo ${win_base_url}/${win_arch}/bootmgr
+echo ${win_base_url}/${win_arch}/bootmgr.efi
+echo ${win_base_url}/${win_arch}/boot/bcd
+echo ${win_base_url}/${win_arch}/boot/boot.sdi
+echo ${win_base_url}/${win_arch}/sources/boot.wim
+echo
+prompt Press any key to return to Windows Menu...
+goto windows
+
+:win_install
+isset ${win_base_url} && goto boot || echo URL not set... && goto url_set
+
+:boot
+imgfree
+kernel http://${boot_domain}/wimboot
+initrd -n bootmgr     ${win_base_url}/${win_arch}/bootmgr       bootmgr ||
+initrd -n bootmgr.efi ${win_base_url}/${win_arch}/bootmgr.efi   bootmgr.efi ||      
+initrd -n bcd         ${win_base_url}/${win_arch}/boot/bcd      bcd ||
+initrd -n bcd         ${win_base_url}/${win_arch}/Boot/BCD      bcd ||
+initrd -n boot.sdi    ${win_base_url}/${win_arch}/boot/boot.sdi boot.sdi ||
+initrd -n boot.sdi    ${win_base_url}/${win_arch}/Boot/boot.sdi boot.sdi ||
+initrd -n boot.wim    ${win_base_url}/${win_arch}/sources/boot.wim boot.wim
+boot
+
+:windows_exit
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu windows - netboot.xyz standalone
+item nbx_restart ${space} Back to windows menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the windows menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

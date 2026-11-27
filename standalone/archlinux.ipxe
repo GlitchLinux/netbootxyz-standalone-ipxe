@@ -1,0 +1,129 @@
+#!ipxe
+# archlinux.ipxe - standalone netboot.xyz "archlinux" menu
+# Source : https://boot.netboot.xyz/archlinux.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/archlinux.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/archlinux.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+isset ${archlinux_mirror} || set archlinux_mirror mirrors.kernel.org
+isset ${archlinux_base_dir} || set archlinux_base_dir archlinux
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu archlinux
+
+# Arch Linux Operating System
+# http://www.archlinux.org
+
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} i386 && set os_arch i686 ||
+isset ${dhcp-server} || goto static_ip
+set ipparam BOOTIF=${netX/mac} ip=dhcp
+set real_archlinux_mirror ${archlinux_mirror}
+goto goto_menu
+
+:static_ip
+# Arch Linux cannot use DNS if booted with a static IP
+# See https://bugs.archlinux.org/task/63174
+# Remove this hack when the above bug is properly resolved
+nslookup real_archlinux_mirror ${archlinux_mirror}
+set ipparam BOOTIF=${netX/mac} ip=${ip}::${gateway}:${netmask}
+
+:goto_menu
+goto ${menu} ||
+
+:archlinux
+set os Arch Linux
+clear arch_version
+menu ${os} - ${arch}
+item --gap Latest Releases
+item 2026.11.01 ${space} ${os} 2026.11.01
+choose arch_version || goto archlinux_exit
+iseq ${os_arch} amd64 && goto boot ||
+iseq ${os_arch} i686 && goto boot32 ||
+
+:boot
+imgfree
+set dir ${archlinux_base_dir}/iso/${arch_version}/arch/boot
+set params archiso_http_srv=http://${real_archlinux_mirror}/${archlinux_base_dir}/iso/${arch_version}/ archisobasedir=arch cms_verify=y ${ipparam} net.ifnames=0 initrd=initrd.magic ${cmdline}
+kernel http://${archlinux_mirror}/${dir}/${os_arch}/vmlinuz-linux ${params}
+initrd http://${archlinux_mirror}/${dir}/${os_arch}/initramfs-linux.img
+echo
+echo MD5sums:
+md5sum vmlinuz-linux initramfs-linux.img
+boot
+goto archlinux_exit
+
+:boot32
+set arch32_url ${live_endpoint}/asset-mirror/releases/download/2024.07.10-a0d44609/
+imgfree
+set params archiso_http_srv=${arch32_url} archisobasedir=arch checksum=y ${ipparam} net.ifnames=0 initrd=initrd.magic ${cmdline}
+kernel ${arch32_url}vmlinuz-linux ${ipparam} ${params}
+initrd ${arch32_url}initramfs-linux.img
+echo
+echo MD5sums:
+md5sum vmlinuz-linux initramfs-linux.img
+boot
+goto archlinux_exit
+
+:archlinux_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu archlinux - netboot.xyz standalone
+item nbx_restart ${space} Back to archlinux menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the archlinux menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

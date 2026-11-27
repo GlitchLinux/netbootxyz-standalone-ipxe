@@ -1,0 +1,107 @@
+#!ipxe
+# gentoo.ipxe - standalone netboot.xyz "gentoo" menu
+# Source : https://boot.netboot.xyz/gentoo.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/gentoo.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/gentoo.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu gentoo
+
+# Gentoo Operating System
+# http://www.gentoo.org
+
+:gentoo
+clear gentoo_version
+set os Gentoo
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+iseq ${os_arch} i386 && set os_arch x86 ||
+iseq ${os_arch} arm64 && set os_arch arm64 ||
+menu ${os} - Current Arch [ ${os_arch} ]
+item --gap ${os} Versions
+iseq ${os_arch} amd64 && item 20260913T163055Z_amd64 ${space} ${os} 20260913T163055Z - amd64 ||
+iseq ${os_arch} arm64 && item 20261101T233055Z_arm64 ${space} ${os} 20261101T233055Z - arm64 ||
+iseq ${os_arch} x86 && item 20261020T160054Z_x86 ${space} ${os} 20261020T160054Z - x86 ||
+choose gentoo_version || goto gentoo_exit
+goto ${gentoo_version}
+
+:20260913T163055Z_amd64
+set url ${live_endpoint}/asset-mirror/releases/download/20260913T163055Z-245180de/
+goto boot
+:20261101T233055Z_arm64
+set url ${live_endpoint}/asset-mirror/releases/download/20261101T233055Z-e9d13c28/
+goto boot
+:20261020T160054Z_x86
+set url ${live_endpoint}/asset-mirror/releases/download/20261020T160054Z-066bbf20/
+goto boot
+
+:boot
+imgfree
+kernel ${url}vmlinuz ip=dhcp root=/dev/ram0 init=/linuxrc loop=/image.squashfs looptype=squashfs cdroot=1 initrd=initrd.magic ${cmdline}
+initrd ${url}initrd
+initrd ${url}image.squashfs /image.squashfs
+boot
+
+:gentoo_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu gentoo - netboot.xyz standalone
+item nbx_restart ${space} Back to gentoo menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the gentoo menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

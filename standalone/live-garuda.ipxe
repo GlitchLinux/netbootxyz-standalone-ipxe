@@ -1,0 +1,163 @@
+#!ipxe
+# live-garuda.ipxe - standalone netboot.xyz "live-garuda" menu
+# Source : https://boot.netboot.xyz/live-garuda.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/live-garuda.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/live-garuda.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu live-garuda
+
+# Garuda Linux
+# https://garudalinux.org/
+
+goto ${menu} ||
+
+:live-garuda
+set os Garuda
+menu ${os} Live
+set ipparam BOOTIF=${netX/mac} ip=dhcp net.ifnames=0
+item --gap ${os} Live versions
+item 250801-cinnamon ${space} ${os} Cinnamon (250801)
+item 250801-dr460nized ${space} ${os} Dr460nized (250801)
+item 250801-dr460nized-gaming ${space} ${os} Dr460nized-Gaming (250801)
+item 250801-gnome ${space} ${os} Gnome (250801)
+item 250801-i3wm ${space} ${os} I3wm (250801)
+item 220329-kde-barebones ${space} ${os} Kde-Barebones (220329)
+item 230501-lxqt-kwin ${space} ${os} Lxqt-Kwin (230501)
+item 230501-mate ${space} ${os} Mate (230501)
+item 231029-qtile ${space} ${os} Qtile (231029)
+item 250801-sway ${space} ${os} Sway (250801)
+item 230501-wayfire ${space} ${os} Wayfire (230501)
+item 250801-xfce ${space} ${os} Xfce (250801)
+choose menu || goto live_exit
+goto ${menu}
+
+:250801-cinnamon
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-0b360492/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-0b360492/
+goto boot
+
+:250801-dr460nized
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-f610be58/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-f610be58/
+goto boot
+
+:250801-dr460nized-gaming
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-a96201bb/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-a96201bb/
+goto boot
+
+:250801-gnome
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-c80a21be/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-c80a21be/
+goto boot
+
+:250801-i3wm
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-d48b8f05/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-d48b8f05/
+goto boot
+
+:220329-kde-barebones
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/220329-198784ed/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/220329-198784ed/
+goto boot
+
+:230501-lxqt-kwin
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/230501-f13b4b24/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/230501-f13b4b24/
+goto boot
+
+:230501-mate
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/230501-3af08aa6/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/230501-3af08aa6/
+goto boot
+
+:231029-qtile
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/231029-9dfb930b/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/231029-9dfb930b/
+goto boot
+
+:250801-sway
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-8d451890/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-8d451890/
+goto boot
+
+:230501-wayfire
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/230501-61b681d1/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/230501-61b681d1/
+goto boot
+
+:250801-xfce
+set fetch_url ${live_endpoint}/asset-mirror/releases/download/250801-c866e6bf/
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/250801-c866e6bf/
+goto boot
+
+:boot
+imgfree
+kernel ${kernel_url}vmlinuz misobasedir=garuda ${ipparam} miso_http_srv=${fetch_url} nouveau.modeset=1 i915.modeset=1 radeon.modeset=1 driver=free initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initramfs.img
+boot
+
+:live_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu live-garuda - netboot.xyz standalone
+item nbx_restart ${space} Back to live-garuda menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the live-garuda menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

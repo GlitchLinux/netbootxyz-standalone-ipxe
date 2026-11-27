@@ -1,0 +1,142 @@
+#!ipxe
+# openEuler.ipxe - standalone netboot.xyz "openEuler" menu
+# Source : https://boot.netboot.xyz/openEuler.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/openEuler.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/openEuler.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${openEuler_mirror} || set openEuler_mirror http://repo.openeuler.org
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu openEuler
+
+# openEuler
+# https://openeuler.org/
+
+isset ${dhcp-server} && set ipparam ip=dhcp || set ipparam ip=${ip}::${gateway}:${netmask}:::none nameserver=${dns}
+set ipparam BOOTIF=${netX/mac} ${ipparam}
+
+goto ${menu} ||
+
+:openEuler
+clear osversion
+set os openEuler
+menu ${os} - ${arch}
+item openEuler-24.09 ${space} ${os} openEuler-24.09
+item openEuler-24.03-LTS-SP1 ${space} ${os} openEuler-24.03-LTS-SP1
+item openEuler-20.03-LTS-SP3 ${space} ${os} openEuler-20.03-LTS-SP3
+item openEuler-22.03-LTS ${space} ${os} openEuler-22.03-LTS
+item openEuler-22.03-LTS-SP1 ${space} ${os} openEuler-22.03-LTS-SP1
+item openEuler-22.03-LTS-SP2 ${space} ${os} openEuler-22.03-LTS-SP2
+isset ${osversion} || choose osversion || goto linux_menu
+echo ${cls}
+set dir ${osversion}/OS/${arch}
+set repo ${openEuler_mirror}/${dir}
+goto boottype
+
+:boottype
+set ova ${os} ${osversion}
+menu ${os} ${arch} boot type
+item graphical ${ova} graphical installer
+item text ${ova} text based installer
+item rescue ${ova} rescue
+item kickstart ${ova} set kickstart url [ ${ks_url} ]
+isset ${bt} || choose bt || goto openEuler
+echo ${cls}
+iseq ${bt} text && goto text ||
+iseq ${bt} rescue && goto rescue ||
+iseq ${bt} kickstart && goto kickstart ||
+iseq ${bt} kickstart_device && goto kickstart_device ||
+goto bootos_images
+
+:graphical
+set install_mode inst.graphical ||
+goto bootos_images
+
+:text
+set install_mode inst.text ||
+goto bootos_images
+
+:rescue
+set params inst.rescue ||
+goto bootos_images
+
+:kickstart
+echo -n Specify kickstart URL for ${os} ${osversion}: && read ks_url
+set params inst.ks=${ks_url} ||
+clear bt
+goto boottype
+
+:bootos_images
+imgfree
+kernel ${openEuler_mirror}/${dir}/images/pxeboot/vmlinuz inst.repo=${repo} ${install_mode} ${params} ${ipparam} initrd=initrd.magic ${cmdline}
+initrd ${openEuler_mirror}/${dir}/images/pxeboot/initrd.img
+echo
+echo MD5sums:
+md5sum vmlinuz initrd.img
+boot
+goto linux_menu
+
+:linux_menu
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+:kickstart_device
+echo openEuler: menu target 'kickstart_device' does not exist upstream.
+prompt Press any key...
+goto nbx_exit
+
+########## standalone exit menu ##########
+:nbx_exit
+menu openEuler - netboot.xyz standalone
+item nbx_restart ${space} Back to openEuler menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the openEuler menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

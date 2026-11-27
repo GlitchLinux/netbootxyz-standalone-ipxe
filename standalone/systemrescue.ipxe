@@ -1,0 +1,111 @@
+#!ipxe
+# systemrescue.ipxe - standalone netboot.xyz "systemrescue" menu
+# Source : https://boot.netboot.xyz/systemrescue.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/systemrescue.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/systemrescue.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu systemrescue
+
+goto ${menu} ||
+
+:live_menu
+set os System Rescue
+set os_arch ${arch}
+isset ${rootpass_enabled} || set rootpass_enabled false
+set rootpass ${mac:hexraw}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+iseq ${os_arch} i386 && set os_arch i686 ||
+menu ${os}
+set ipparam BOOTIF=${netX/mac} ip=dhcp net.ifnames=0
+item --gap ${os} Versions
+iseq ${os_arch} amd64 && item 13.03_${os_arch} ${space} ${os} 13.03 ||
+iseq ${os_arch} i686 && item 9.03_${os_arch} ${space} ${os} 9.03 ||
+item rootpass_mac Enable rootpass=${rootpass} [IP:${ip}] [ enabled: ${rootpass_enabled} ]
+choose live_version || goto live_exit
+goto ${live_version}
+
+:13.03_amd64
+set url ${live_endpoint}/asset-mirror/releases/download/13.03-ad4fca0b/
+goto boot
+
+:9.03_i686
+set url ${live_endpoint}/asset-mirror/releases/download/9.03-0f19cc5c/
+goto boot
+
+
+:rootpass_mac
+clear params
+iseq ${rootpass_enabled} true && set rootpass_enabled false || set rootpass_enabled true && set params rootpass=${rootpass} nofirewall
+goto live_menu
+
+:boot
+imgfree
+kernel ${url}vmlinuz archisobasedir=sysresccd ${ipparam} archiso_http_srv=${url} ${params} initrd=initrd.magic ${cmdline}
+initrd ${url}initrd
+initrd ${url}archiso_pxe_http /hooks/archiso_pxe_http mode=755
+boot
+
+:live_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu systemrescue - netboot.xyz standalone
+item nbx_restart ${space} Back to systemrescue menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the systemrescue menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

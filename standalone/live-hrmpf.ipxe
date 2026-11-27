@@ -1,0 +1,98 @@
+#!ipxe
+# live-hrmpf.ipxe - standalone netboot.xyz "live-hrmpf" menu
+# Source : https://boot.netboot.xyz/live-hrmpf.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/live-hrmpf.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/live-hrmpf.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${live_endpoint} || set live_endpoint https://github.com/netbootxyz
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu live-hrmpf
+
+# hrmpf
+# https://github.com/leahneukirchen/hrmpf/
+
+goto ${menu} ||
+
+:live-hrmpf
+clear hrmpf_version
+set os hrmpf
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch amd64 ||
+menu ${os}
+item --gap ${os} Versions
+item 20231124 ${space} ${os} 20231124
+choose hrmpf_version || goto hrmpf_exit
+goto ${hrmpf_version}
+
+:20231124
+set kernel_url ${live_endpoint}/asset-mirror/releases/download/20231124-1008bb6d/
+goto boot
+
+:boot
+imgfree
+kernel ${kernel_url}vmlinuz root=live:${kernel_url}squashfs.img ro init=/sbin/init rd.luks=0 rd.md=0 rd.dm=0 gpt add_efi_memmap vconsole.unicode=1 vconsole.keymap=us locale.LANG=en_US.UTF-8 loglevel=6 printk.time=1 consoleblank=0 net.ifnames=0 initrd=initrd.magic ${cmdline}
+initrd ${kernel_url}initrd
+boot
+
+:hrmpf_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu live-hrmpf - netboot.xyz standalone
+item nbx_restart ${space} Back to live-hrmpf menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the live-hrmpf menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

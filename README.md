@@ -1,13 +1,14 @@
 # netbootxyz-menus
 
 Snapshot of the rendered netboot.xyz iPXE menus, scraped from
-https://boot.netboot.xyz/ on 2026-11-27 for study.
+https://boot.netboot.xyz/ on 2026-11-27 for study, plus standalone
+per-distro versions that can be embedded into their own iPXE ISO.
 
-These are the generated output files, not the upstream Jinja2 templates
-from https://github.com/netbootxyz/netboot.xyz. All credit to the
-netboot.xyz project.
+The top-level files are the unmodified generated output, not the upstream
+Jinja2 templates from https://github.com/netbootxyz/netboot.xyz.
+All credit to the netboot.xyz project (Apache-2.0).
 
-## Boot flow
+## Boot flow (upstream)
 
 1. `menu.ipxe` - entry point. Detects arch (`cpuid --ext 29`), chains `boot.cfg`.
 2. `boot.cfg` - global variables: site name, boot domain, signature URL,
@@ -33,3 +34,48 @@ netboot.xyz project.
   `netinfo`, `lspci`, `pciids`, ...
 
 `index.html` is the netboot.xyz front page at the time of scraping.
+
+## standalone/ - one distro per ISO
+
+`standalone/<name>.ipxe` is the same menu made self-contained, for
+`make bin/ipxe.iso EMBED=<name>.ipxe`. Each file gets:
+
+1. Bootstrap header - arch detect, `${space}` / `${cls}`, DHCP retry loop
+   (falls back to the iPXE shell), `ntp` for TLS certificate time checks.
+2. Only the `boot.cfg` globals that menu uses (mirrors, `live_endpoint`,
+   `memdisk`, ...) as `isset ${x} || set x ...`.
+3. `set menu <name>` - exactly what the parent netboot.xyz menu sets
+   before `chain <name>.ipxe`, so the original `goto ${menu}` dispatch works.
+4. Every `exit` redirected to a local exit menu: back to menu, iPXE shell,
+   reboot, power off, or real exit.
+5. Stub labels for goto targets missing upstream
+   (`kickstart_device` in almalinux/centos/openEuler, `fail` in smartos).
+
+Not converted (menu infrastructure, not a single distro): `menu`, `about`,
+`version`, the section menus above, `netinfo`, `lspci`, `pciids`, `nbxyz`.
+
+### Build an ISO
+
+```
+cd standalone
+./build-iso.sh ubuntu.ipxe /tmp/netbootxyz-ubuntu.iso      # BIOS + UEFI hybrid
+SERIAL=1 ./build-iso.sh debian.ipxe                         # + serial console
+```
+
+`build-iso.sh` clones iPXE to `/tmp/ipxe` if needed, installs
+`ipxe-config/general.h` as `config/local/general.h` (re-enables HTTPS, ntp,
+md5sum etc. that upstream iPXE disables for BIOS builds), builds
+`bin/ipxe.lkrn` + `bin-x86_64-efi/ipxe.efi` and combines them with
+`util/genfsimg`.
+
+### Regenerate
+
+```
+python3 tools/make-standalone.py . standalone    # needs boot.cfg + *.ipxe here
+python3 tools/validate.py standalone
+python3 tools/qemu-test.py <iso> <log> 300 -- 'regex=>keys' ...
+```
+
+Known upstream quirks kept as-is: `live-q4os.ipxe` has a duplicate `:6.10`
+label (harmless), `live-peppermint.ipxe` uses `${kernel_url}` / `${squash_url}`
+which nothing sets.

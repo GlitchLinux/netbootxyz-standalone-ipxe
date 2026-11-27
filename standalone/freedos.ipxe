@@ -1,0 +1,94 @@
+#!ipxe
+# freedos.ipxe - standalone netboot.xyz "freedos" menu
+# Source : https://boot.netboot.xyz/freedos.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/freedos.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/freedos.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${boot_domain} || set boot_domain boot.netboot.xyz
+isset ${memdisk} || set memdisk http://${boot_domain}/memdisk
+isset ${freedos_mirror} || set freedos_mirror http://www.ibiblio.org
+isset ${freedos_base_dir} || set freedos_base_dir pub/micro/pc-stuff/freedos/files/distributions/1.4
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu freedos
+
+# FreeDOS Operating System
+# http://www.freedos.org
+
+:freedos_menu
+set os FreeDOS
+menu ${os}
+item --gap ${os}
+item FD14-FullUSB ${space} ${os} 1.4 Full Installer
+item FD14-LiteUSB ${space} ${os} 1.4 Lite Installer
+choose freedos_version || goto freedos_exit
+echo ${cls}
+goto freedos_install || goto freedos_exit
+
+:freedos_install
+imgfree
+kernel ${memdisk}
+initrd ${freedos_mirror}/${freedos_base_dir}/${freedos_version}.zip
+boot
+
+:freedos_exit
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+# (none)
+
+########## standalone exit menu ##########
+:nbx_exit
+menu freedos - netboot.xyz standalone
+item nbx_restart ${space} Back to freedos menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the freedos menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1

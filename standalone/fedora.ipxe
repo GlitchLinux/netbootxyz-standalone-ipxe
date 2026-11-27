@@ -1,0 +1,158 @@
+#!ipxe
+# fedora.ipxe - standalone netboot.xyz "fedora" menu
+# Source : https://boot.netboot.xyz/fedora.ipxe (scraped 2026-11-27)
+# Built  : make-standalone.py - bootstrap + boot.cfg globals inlined,
+#          exits redirected to a local exit menu.
+# Embed  : make bin/ipxe.iso EMBED=/path/fedora.ipxe
+#          make bin-x86_64-efi/ipxe.efi EMBED=/path/fedora.ipxe
+# Original netboot.xyz code: https://github.com/netbootxyz/netboot.xyz (Apache-2.0)
+
+########## standalone bootstrap ##########
+:nbx_init
+isset ${arch} && goto nbx_arch_done ||
+cpuid --ext 29 && set arch x86_64 || set arch i386
+iseq ${buildarch} arm64 && set arch arm64 ||
+:nbx_arch_done
+set space:hex 20:20
+set space ${space:string}
+iseq ${cls} serial && goto nbx_cls_done ||
+set cls:hex 1b:5b:4a
+set cls ${cls:string}
+:nbx_cls_done
+
+:nbx_net
+isset ${ip} && goto nbx_net_done ||
+echo Configuring network (DHCP)...
+dhcp && goto nbx_net_done ||
+echo DHCP failed - press any key to retry, or wait 10s for the iPXE shell.
+prompt --timeout 10000 && goto nbx_net ||
+echo Type "exit" in the shell to retry DHCP.
+shell
+goto nbx_net
+:nbx_net_done
+ntp 0.pool.ntp.org ||
+
+########## netboot.xyz globals used by this menu (from boot.cfg) ##########
+isset ${fedora_mirror} || set fedora_mirror http://mirrors.kernel.org
+isset ${fedora_base_dir} || set fedora_base_dir fedora
+
+########## original netboot.xyz menu ##########
+:nbx_start
+set menu fedora
+
+# Fedora Operating System
+# https://getfedora.org/
+
+isset ${dhcp-server} && set ipparam ip=dhcp || set ipparam ip=${ip}::${gateway}:${netmask}:::none nameserver=${dns}
+set ipparam BOOTIF=${netX/mac} ${ipparam}
+
+goto ${menu} ||
+
+:fedora
+clear osversion
+clear sku_type
+clear ova
+clear bt
+set os Fedora
+set os_arch ${arch}
+iseq ${os_arch} x86_64 && set os_arch x86_64 ||
+iseq ${os_arch} arm64 && set os_arch aarch64 ||
+
+menu ${os} - ${os_arch}
+item --gap Latest Releases
+item 44 ${space} ${os} 44
+item 43 ${space} ${os} 43
+item 42 ${space} ${os} 42
+iseq ${os_arch} x86_64 && item rawhide ${space} ${os} rawhide ||
+isset ${osversion} || choose osversion || goto linux_menu
+set ova ${os} ${osversion}
+goto product_sku
+
+:product_sku
+menu ${os} ${os_arch} sku type
+item Everything ${ova} Everything
+item Server ${ova} Server
+item Kinoite ${ova} Kinoite
+item Onyx ${ova} Onyx
+item Silverblue ${ova} Silverblue 
+item Sericea ${ova} Sericea
+isset ${sku_type} || choose sku_type || goto fedora
+set dir ${fedora_base_dir}/releases/${osversion}/${sku_type}/${os_arch}/os
+iseq ${osversion} rawhide && set dir ${fedora_base_dir}/development/${osversion}/${sku_type}/${os_arch}/os ||
+set ova ${ova} ${sku_type}
+echo ${cls}
+goto boottype
+
+:boottype
+menu ${os} ${os_arch} boot type
+item graphical ${ova} graphical install
+item text ${ova} text install
+item rescue ${ova} rescue
+item kickstart ${ova} set kickstart url [ ${ks_url} ]
+isset ${bt} || choose bt || goto fedora
+echo ${cls}
+iseq ${bt} normal && goto boot ||
+goto ${bt}
+
+:graphical
+set install_mode inst.graphical ||
+goto bootos_images
+
+:text
+set install_mode inst.text ||
+goto bootos_images
+
+:rescue
+set params inst.rescue ||
+goto bootos_images
+
+:kickstart
+echo -n Specify kickstart URL for ${os} ${osversion}: && read ks_url
+set params inst.ks=${ks_url} ||
+clear bt
+goto boottype
+
+:bootos_images
+imgfree
+kernel ${fedora_mirror}/${dir}/images/pxeboot/vmlinuz inst.repo=${fedora_mirror}/${dir} ${install_mode} ${params} ${ipparam} initrd=initrd.magic ${cmdline}
+initrd ${fedora_mirror}/${dir}/images/pxeboot/initrd.img
+echo
+echo MD5sums:
+md5sum vmlinuz initrd.img
+boot
+goto linux_menu
+
+:linux_menu
+clear menu
+goto nbx_exit
+
+########## standalone stubs for labels missing upstream ##########
+:boot
+echo fedora: menu target 'boot' does not exist upstream.
+prompt Press any key...
+goto nbx_exit
+
+########## standalone exit menu ##########
+:nbx_exit
+menu fedora - netboot.xyz standalone
+item nbx_restart ${space} Back to fedora menu
+item nbx_shell ${space} iPXE shell
+item nbx_reboot ${space} Reboot
+item nbx_poweroff ${space} Power off
+item nbx_quit ${space} Exit iPXE (continue firmware boot order)
+choose --default nbx_restart nbx_choice || goto nbx_start
+goto ${nbx_choice}
+:nbx_restart
+goto nbx_start
+:nbx_shell
+echo Type "exit" to return to the fedora menu.
+shell
+goto nbx_start
+:nbx_reboot
+reboot
+goto nbx_start
+:nbx_poweroff
+poweroff
+goto nbx_start
+:nbx_quit
+exit 1
