@@ -14,7 +14,11 @@ All credit to the netboot.xyz project (Apache-2.0).
 | `standalone/` | Self-contained per-distro scripts for `EMBED=`, Carbon theme, `build-iso.sh`, `ipxe-config/general.h` |
 | `iso/`        | Built hybrid BIOS+UEFI ISOs: `<Distro>-ipxe.iso` + `SHA256SUMS` |
 | `efi/`        | `BOOTx64.EFI` extracted from each ISO's `efi.img`: `<Distro>-ipxe.efi` + `SHA256SUMS` |
-| `tools/`      | analyze, make-standalone, validate, qemu-test |
+| `refind/`     | `ipxe-efi.img.xz` - rEFInd FAT32 ESP image with all `<Distro>-ipxe.efi` + menu entries, `refind.conf` (CR line endings, as in the image), `SHA256SUMS` |
+| `tools/`      | analyze, make-standalone, validate, qemu-test, expand-ipxe-efi |
+
+The rEFInd image is 107 MiB uncompressed (over GitHub's 100 MiB file limit), so it is stored xz-compressed:
+`xz -dk refind/ipxe-efi.img.xz && (cd refind && sha256sum -c SHA256SUMS)`
 
 ## Boot flow (upstream)
 
