@@ -20,6 +20,7 @@ Bundled iPXE, SYSLINUX and rEFInd binaries keep their own licenses (see `NOTICE`
 | `iso/`        | Built hybrid BIOS+UEFI ISOs: `<Distro>-ipxe.iso` + `SHA256SUMS` |
 | `efi/`        | `BOOTx64.EFI` extracted from each ISO's `efi.img`: `<Distro>-ipxe.efi` + `SHA256SUMS` |
 | `krn/`        | BIOS iPXE (`/boot/ipxe.krn`, Linux bzImage format) extracted from each ISO: `<Distro>-ipxe.krn` + `SHA256SUMS` - boot from GRUB (`linux16`), syslinux (`KERNEL`) or memdisk-free loaders |
+| `multiboot/`  | `iPXE-MultiBoot.iso.xz` (BIOS) and `iPXE-MultiBoot-Hybrid.iso.xz` (BIOS+UEFI): GRUB/rEFInd multiboot ISOs with every distro, `SHA256SUMS` (unpack with `xz -dk`) |
 | `refind/`     | `ipxe-efi.img.xz` - rEFInd FAT32 ESP image with all `<Distro>-ipxe.efi` + menu entries, `refind.conf` (CR line endings, as in the image), `SHA256SUMS` |
 | `tools/`      | analyze, make-standalone, validate, qemu-test, expand-ipxe-efi |
 
