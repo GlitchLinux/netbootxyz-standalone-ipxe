@@ -4,9 +4,17 @@ Snapshot of the rendered netboot.xyz iPXE menus, scraped from
 https://boot.netboot.xyz/ on 2026-11-27 for study, plus standalone
 per-distro versions that can be embedded into their own iPXE ISO.
 
-The top-level files are the unmodified generated output, not the upstream
-Jinja2 templates from https://github.com/netbootxyz/netboot.xyz.
 All credit to the netboot.xyz project (Apache-2.0).
+
+## Repository layout
+
+| Directory     | Contents |
+|---------------|----------|
+| `ipxe/`       | Original scraped menus (`*.ipxe` + `boot.cfg`), unmodified generated output (not the upstream Jinja2 templates) |
+| `standalone/` | Self-contained per-distro scripts for `EMBED=`, Carbon theme, `build-iso.sh`, `ipxe-config/general.h` |
+| `iso/`        | Built hybrid BIOS+UEFI ISOs: `<Distro>-ipxe.iso` + `SHA256SUMS` |
+| `efi/`        | `BOOTx64.EFI` extracted from each ISO's `efi.img`: `<Distro>-ipxe.efi` + `SHA256SUMS` |
+| `tools/`      | analyze, make-standalone, validate, qemu-test |
 
 ## Boot flow (upstream)
 
@@ -71,7 +79,7 @@ md5sum etc. that upstream iPXE disables for BIOS builds), builds
 ### Regenerate
 
 ```
-python3 tools/make-standalone.py . standalone    # needs boot.cfg + *.ipxe here
+python3 tools/make-standalone.py ipxe standalone
 python3 tools/validate.py standalone
 python3 tools/qemu-test.py <iso> <log> 300 -- 'regex=>keys' ...
 ```
